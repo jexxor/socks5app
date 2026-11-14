@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Phone SOCKS5</string>
+    <string name="requirement">Local SOCKS5 for devices on the same network. Requires an active VPN on this phone.</string>
+    <string name="port_hint">Port</string>
+    <string name="username_hint">Username</string>
+    <string name="passphrase_hint">Passphrase</string>
+    <string name="show_passphrase">Show passphrase</string>
+    <string name="hide_passphrase">Hide passphrase</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="starting">Starting…</string>
+    <string name="stopped">Stopped</string>
+    <string name="port_error">Choose 1024–65535.</string>
+    <string name="username_error">Use 1–64 letters, numbers, dots, underscores or hyphens.</string>
+    <string name="passphrase_error">Use 12–128 printable ASCII characters without spaces.</string>
+    <string name="notification_channel">Phone SOCKS5</string>
+</resources>

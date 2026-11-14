@@ -1,0 +1,15 @@
+.android-sdk/
+.gradle-local/
+.gradle/
+.idea/
+.playwright-mcp/
+.agents/
+.codex/
+.aws/
+build/
+app/build/
+local.properties
+artifacts/
+*.iml
+*.jks
+*.keystore
