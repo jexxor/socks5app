@@ -42,7 +42,7 @@ class ProxyService : Service() {
     private var connectivity: ConnectivityManager? = null
     private var callback: ConnectivityManager.NetworkCallback? = null
 
-    @Volatile private var server: ServerSocket? = null
+    private val servers = ConcurrentHashMap.newKeySet<ServerSocket>()
     @Volatile private var vpnNetwork: Network? = null
     @Volatile private var username: ByteArray? = null
     @Volatile private var password: ByteArray? = null
@@ -96,12 +96,19 @@ class ProxyService : Service() {
             val vpn = activeVpn() ?: throw IOException("No active VPN for this app.")
             vpnNetwork = vpn
 
-            val listener = ServerSocket().apply {
-                reuseAddress = false
-                bind(InetSocketAddress(InetAddress.getByAddress(ByteArray(4)), port), 16)
-                soTimeout = 1000
+            val addresses = localLanAddresses(vpn)
+            if (addresses.isEmpty()) throw IOException("No local LAN address. Enable hotspot or Wi-Fi first.")
+            for (address in addresses) {
+                val listener = ServerSocket().apply {
+                    reuseAddress = false
+                    bind(InetSocketAddress(address, port), 16)
+                    soTimeout = 1000
+                }
+                synchronized(servers) {
+                    if (stopping.get()) listener.close() else servers.add(listener)
+                }
+                if (stopping.get()) return
             }
-            server = listener
             callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onLost(network: Network) {
                     if (network == vpnNetwork) shutdown("Stopped: VPN disconnected.")
@@ -118,6 +125,16 @@ class ProxyService : Service() {
             status = "Listening on LAN port $port"
             publishStatus()
             getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(status))
+            for (listener in servers) {
+                workers?.execute { acceptClients(listener, vpn) }
+            }
+        } catch (ex: Exception) {
+            if (!stopping.get()) shutdown("Stopped: ${ex.message}")
+        }
+    }
+
+    private fun acceptClients(listener: ServerSocket, vpn: Network) {
+        try {
             while (!stopping.get()) {
                 try {
                     val client = listener.accept()
@@ -144,6 +161,18 @@ class ProxyService : Service() {
         } catch (ex: Exception) {
             if (!stopping.get()) shutdown("Stopped: ${ex.message}")
         }
+    }
+
+    private fun localLanAddresses(vpn: Network): Set<Inet4Address> {
+        val vpnInterface = connectivity?.getLinkProperties(vpn)?.interfaceName
+        return NetworkInterface.getNetworkInterfaces().toList()
+            .asSequence()
+            .filter { it.isUp && !it.isLoopback && !it.isPointToPoint && it.name != vpnInterface }
+            .flatMap { it.interfaceAddresses.asSequence() }
+            .filter { it.broadcast != null && it.networkPrefixLength.toInt() in 1..32 }
+            .mapNotNull { it.address as? Inet4Address }
+            .filter { it.isSiteLocalAddress }
+            .toSet()
     }
 
     private fun handleClient(client: Socket) {
@@ -265,7 +294,10 @@ class ProxyService : Service() {
         running = false
         status = reason
         publishStatus()
-        server.closeQuietly()
+        synchronized(servers) {
+            servers.forEach { it.closeQuietly() }
+            servers.clear()
+        }
         sockets.forEach { it.closeQuietly() }
         sockets.clear()
         val registered = callback
